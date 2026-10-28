@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🐄 BullsEye - AI Cow Detection & BreedTrace-XAI</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');
+
+        :root {
+            --background-dark: #0a0a0f;
+            --background-light: #10101a;
+            --background-card: #141422;
+            --border-color: rgba(0, 163, 255, 0.22);
+            --border-glow: rgba(0, 163, 255, 0.45);
+            --accent-color: #00A3FF;
+            --accent-green: #10b981;
+            --accent-purple: #8b5cf6;
+            --accent-crimson: #ef4444;
+            --accent-amber: #f59e0b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --font-primary: 'Rajdhani', sans-serif;
+            --font-secondary: 'Orbitron', sans-serif;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-primary);
+            background-color: var(--background-dark);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* --- Splash Screen Loader --- */
+        #splash-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--background-dark);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+            transition: opacity 0.8s ease-out, visibility 0.8s;
+        }
+
+        body.loaded #splash-screen {
+            opacity: 0;
+            visibility: hidden;
+        }
+        
+        .bullseye-loader {
+            font-family: var(--font-secondary);
+            font-size: 3em;
+            font-weight: 700;
+            color: var(--accent-color);
+            letter-spacing: 3px;
+            display: flex;
+        }
+        
+        .bullseye-loader .letter {
+            display: inline-block;
+            animation: wave 2s infinite ease-in-out;
+        }
+        
+        .bullseye-loader .letter:nth-child(1) { animation-delay: 0s; }
+        .bullseye-loader .letter:nth-child(2) { animation-delay: 0.1s; }
+        .bullseye-loader .letter:nth-child(3) { animation-delay: 0.2s; }
+        .bullseye-loader .letter:nth-child(4) { animation-delay: 0.3s; }
+        .bullseye-loader .letter:nth-child(5) { animation-delay: 0.4s; }
+        .bullseye-loader .letter:nth-child(6) { animation-delay: 0.5s; }
+        .bullseye-loader .letter:nth-child(7) { animation-delay: 0.6s; }
+        .bullseye-loader .letter:nth-child(8) { animation-delay: 0.7s; }
+        
+        @keyframes wave {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-15px); }
+        }
+
+        /* --- Main Content --- */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 20px 60px 20px;
+            opacity: 0;
+            transition: opacity 0.8s ease-in;
+        }
+
+        body.loaded .main-container {
+            opacity: 1;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 35px;
+        }
+
+        .logo {
+            font-family: var(--font-secondary);
+            font-size: 3em;
+            font-weight: 800;
+            color: var(--text-primary);
+            letter-spacing: 3px;
+            margin-bottom: 4px;
+            text-shadow: 0 0 25px rgba(0, 163, 255, 0.4);
+        }
+        .logo span { color: var(--accent-color); }
+        .subtitle {
+            font-size: 1.15em;
+            color: var(--text-secondary);
+            font-weight: 500;
+            letter-spacing: 1px;
+        }
+        
+        .content-wrapper {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 25px;
+            align-items: flex-start;
+        }
+
+        @media (max-width: 980px) {
+            .content-wrapper { grid-template-columns: 1fr; }
+        }
+
+        /* --- Left Column: Video Feed --- */
+        #video-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            background: var(--background-light);
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+        }
+        video, #resultImage {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        #videoStatus {
+            font-family: var(--font-secondary);
+            font-size: 1.2em;
+            color: var(--text-secondary);
+            letter-spacing: 1.5px;
+        }
+
+        /* --- Right Column: Controls & Data --- */
+        .controls-data-wrapper {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .control-panel, .status-panel, .results-panel {
+            background: var(--background-light);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+        }
+
+        .panel-title {
+            font-family: var(--font-secondary);
+            font-size: 1.15em;
+            margin-bottom: 15px;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .panel-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 16px;
+            background: var(--accent-color);
+            border-radius: 2px;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+        
+        .mode-selector {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 6px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            margin-bottom: 5px;
+        }
+        .mode-btn {
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: var(--font-secondary);
+            font-size: 0.85em;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+        .mode-btn.active {
+            background: var(--accent-color);
+            color: var(--background-dark);
+            font-weight: 700;
+            box-shadow: 0 0 12px rgba(0, 163, 255, 0.5);
+        }
+
+        .btn {
+            padding: 11px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: transparent;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            font-family: var(--font-primary);
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .btn:hover { background-color: rgba(0, 163, 255, 0.15); border-color: var(--accent-color); color: #fff; }
+        .btn::before { content: '›'; margin-right: 8px; font-size: 1.4em; line-height: 1; color: var(--accent-color); }
+        
+        .btn-shutter {
+            background: linear-gradient(135deg, rgba(0, 163, 255, 0.25), rgba(16, 185, 129, 0.25));
+            border: 1.5px solid var(--accent-color);
+            color: #fff;
+            font-size: 1.05em;
+            font-weight: 700;
+            letter-spacing: 1px;
+            box-shadow: 0 0 18px rgba(0, 163, 255, 0.3);
+        }
+        .btn-shutter:hover {
+            background: linear-gradient(135deg, #00A3FF, #10b981);
+            color: var(--background-dark);
+            box-shadow: 0 0 25px rgba(0, 163, 255, 0.6);
+            transform: translateY(-1px);
+        }
+        .btn-shutter::before { content: '📸'; margin-right: 8px; font-size: 1.1em; }
+        
+        .btn-upload { border-style: dashed; }
+        .btn-upload::before { content: '📁'; margin-right: 8px; }
+
+        .kbd-badge {
+            font-size: 0.75em;
+            padding: 2px 6px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 4px;
+            font-family: monospace;
+            color: #fff;
+        }
+
+        #dropOverlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0, 163, 255, 0.2);
+            border: 2px dashed var(--accent-color);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-secondary);
+            font-size: 1.3em;
+            color: #fff;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        #status, #counter-container {
+            font-size: 1.05em;
+            font-family: var(--font-secondary);
+        }
+        #status { color: var(--text-secondary); }
+        #counter-container { color: var(--accent-color); font-weight: 600; }
+        
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .results-table th, .results-table td {
+            padding: 9px 8px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .results-table th {
+            color: var(--accent-color);
+            font-weight: 700;
+            font-size: 0.9em;
+            letter-spacing: 0.5px;
+        }
+        .results-table tr:last-child td { border-bottom: none; }
+
+        /* --- Acquisition Archive Section --- */
+        .gallery-section { margin-top: 45px; }
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .section-title {
+            font-family: var(--font-secondary);
+            font-size: 1.7em;
+            color: var(--text-primary);
+            letter-spacing: 1px;
+        }
+        .archive-counter {
+            background: rgba(0, 163, 255, 0.1);
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            color: var(--accent-color);
+            font-family: var(--font-secondary);
+        }
+        .gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+            gap: 20px;
+        }
+        .gallery-item {
+            position: relative;
+            background: var(--background-card);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+        }
+        .gallery-item:hover {
+            transform: translateY(-6px);
+            border-color: var(--accent-color);
+            box-shadow: 0 12px 28px rgba(0, 163, 255, 0.22);
+        }
+        .gallery-item img {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            display: block;
+        }
+        .gallery-item .card-body {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .gallery-item .card-breed {
+            font-family: var(--font-secondary);
+            font-size: 1.05em;
+            font-weight: 700;
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .gallery-item .card-conf {
+            color: var(--accent-green);
+            font-size: 0.9em;
+        }
+        .gallery-item .card-meta {
+            font-size: 0.8em;
+            color: var(--text-muted);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 4px;
+        }
+        .badge-xai {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: linear-gradient(135deg, rgba(0, 163, 255, 0.2), rgba(16, 185, 129, 0.2));
+            border: 1px solid var(--accent-color);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        /* --- Archive Inspection Modal --- */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(5, 5, 10, 0.88);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: fadeIn 0.25s ease-out;
+        }
+        .modal-backdrop.active { display: flex; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .modal-card {
+            background: #10101c;
+            border: 1px solid var(--border-glow);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 1180px;
+            max-height: 94vh;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 40px rgba(0, 163, 255, 0.25);
+            overflow: hidden;
+            animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px) scale(0.98); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        .modal-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
+        }
+        .modal-title-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .modal-title {
+            font-family: var(--font-secondary);
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 1px;
+        }
+        .modal-target-badge {
+            background: linear-gradient(135deg, rgba(0, 163, 255, 0.25), rgba(16, 185, 129, 0.25));
+            border: 1px solid var(--accent-color);
+            color: #fff;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.88em;
+            font-weight: 700;
+        }
+        .modal-close-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2em;
+            transition: all 0.2s;
+        }
+        .modal-close-btn:hover {
+            color: #fff;
+            border-color: #ff4d4d;
+            background: rgba(255, 77, 77, 0.15);
+        }
+
+        .modal-body {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr;
+            overflow-y: auto;
+            flex: 1;
+            padding: 24px;
+            gap: 25px;
+        }
+
+        @media (max-width: 960px) {
+            .modal-body { grid-template-columns: 1fr; }
+        }
+
+        /* --- Modal Left: Visual Studio & XAI --- */
+        .xai-studio {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        .image-viewer-box {
+            position: relative;
+            background: #08080d;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 280px;
+            max-height: 360px;
+        }
+        .image-viewer-box img {
+            width: 100%;
+            height: 100%;
+            max-height: 350px;
+            object-fit: contain;
+            display: block;
+        }
+        .img-view-toggle {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            display: flex;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(4px);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 3px;
+            gap: 4px;
+        }
+        .view-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-family: var(--font-secondary);
+            font-size: 0.78em;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .view-btn.active {
+            background: var(--accent-color);
+            color: var(--background-dark);
+            font-weight: 700;
+        }
+
+        .xai-controls {
+            background: var(--background-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+        .xai-label {
+            font-family: var(--font-secondary);
+            font-size: 0.82em;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+        .xai-method-group {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+        }
+        .xai-method-btn {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            padding: 9px 6px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: var(--font-secondary);
+            font-size: 0.78em;
+            text-align: center;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 3px;
+        }
+        .xai-method-btn .icon { font-size: 1.15em; }
+        .xai-method-btn:hover {
+            border-color: var(--accent-color);
+            color: #fff;
+        }
+        .xai-method-btn.active {
+            background: linear-gradient(135deg, rgba(0, 163, 255, 0.25), rgba(16, 185, 129, 0.25));
+            border-color: var(--accent-color);
+            color: #fff;
+            font-weight: 700;
+            box-shadow: 0 0 12px rgba(0, 163, 255, 0.35);
+        }
+        .xai-method-btn.flagship {
+            border-color: rgba(16, 185, 129, 0.5);
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .contrast-selector-grid {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 8px;
+            align-items: center;
+        }
+        .contrast-vs-badge {
+            font-family: var(--font-secondary);
+            font-size: 0.8em;
+            color: var(--accent-amber);
+            font-weight: 700;
+        }
+        .breed-target-select {
+            width: 100%;
+            padding: 8px 10px;
+            background: #0d0d17;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            font-family: var(--font-primary);
+            font-size: 0.9em;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .breed-target-select:focus { border-color: var(--accent-color); }
+
+        .btn-run-xai {
+            background: linear-gradient(135deg, var(--accent-color), #10b981);
+            color: #fff;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 8px;
+            font-family: var(--font-secondary);
+            font-size: 0.95em;
+            font-weight: 700;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all 0.25s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            box-shadow: 0 0 20px rgba(0, 163, 255, 0.4);
+        }
+        .btn-run-xai:hover {
+            box-shadow: 0 0 30px rgba(0, 163, 255, 0.7);
+            transform: translateY(-1px);
+        }
+        .btn-run-xai:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* --- BreedTrace-XAI Anatomical Breakdown Panel --- */
+        .anatomical-evidence-card {
+            background: #0e0e18;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .evidence-card-title {
+            font-family: var(--font-secondary);
+            font-size: 0.88em;
+            color: var(--accent-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .evidence-row {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 6px 8px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            transition: all 0.2s;
+        }
+        .evidence-row:hover {
+            background: rgba(0, 163, 255, 0.08);
+            border-color: var(--border-color);
+        }
+        .evidence-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9em;
+        }
+        .evidence-name {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .evidence-tag {
+            font-family: var(--font-secondary);
+            font-size: 0.78em;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 4px;
+        }
+        .tag-supports {
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.4);
+        }
+        .tag-favors-comp {
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+        .tag-neutral {
+            background: rgba(148, 163, 184, 0.1);
+            color: #94a3b8;
+        }
+        .evidence-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .evidence-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.4s ease;
+        }
+        .fill-supports { background: linear-gradient(90deg, #10b981, #00A3FF); }
+        .fill-comp { background: linear-gradient(90deg, #ef4444, #f59e0b); }
+
+        /* --- Reliability Scorecard --- */
+        .reliability-scorecard {
+            background: rgba(16, 185, 129, 0.06);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            border-radius: 8px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 0.85em;
+        }
+        .reliability-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: var(--font-secondary);
+        }
+        .badge-verified {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+            border: 1px solid #10b981;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 700;
+        }
+        .badge-shortcut {
+            background: rgba(239, 68, 68, 0.2);
+            color: #f87171;
+            border: 1px solid #ef4444;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: 700;
+        }
+
+        /* --- Modal Right: All 41 Prediction Values --- */
+        .predictions-container {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            height: 100%;
+        }
+        .pred-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .search-box {
+            position: relative;
+            width: 100%;
+        }
+        .search-input {
+            width: 100%;
+            padding: 9px 14px 9px 36px;
+            background: #090910;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-family: var(--font-primary);
+            font-size: 0.92em;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .search-input:focus { border-color: var(--accent-color); }
+        .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.9em;
+        }
+
+        .pred-list {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 520px;
+            padding-right: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .pred-list::-webkit-scrollbar { width: 5px; }
+        .pred-list::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+        .pred-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+        .pred-row {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 9px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+        .pred-row:hover {
+            background: rgba(0, 163, 255, 0.08);
+            border-color: var(--border-color);
+        }
+        .pred-row.top-rank {
+            background: rgba(0, 163, 255, 0.12);
+            border-color: rgba(0, 163, 255, 0.4);
+        }
+        .pred-row-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .pred-rank-name {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        .pred-rank {
+            font-family: var(--font-secondary);
+            font-size: 0.75em;
+            color: var(--text-muted);
+            width: 22px;
+        }
+        .pred-row.top-rank .pred-rank { color: var(--accent-color); font-weight: 700; }
+        .pred-name { color: #f8fafc; }
+        .pred-conf-val {
+            font-family: var(--font-secondary);
+            font-weight: 700;
+            font-size: 0.9em;
+            color: var(--accent-color);
+        }
+        .pred-row.top-rank .pred-conf-val { color: var(--accent-green); }
+
+        .pred-bar-bg {
+            width: 100%;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .pred-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            background: linear-gradient(90deg, #00A3FF, #60a5fa);
+            transition: width 0.4s ease;
+        }
+        .pred-row.top-rank .pred-bar-fill {
+            background: linear-gradient(90deg, #10b981, #00A3FF);
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="splash-screen">
+        <div class="bullseye-loader">
+            <span class="letter">B</span>
+            <span class="letter">U</span>
+            <span class="letter">L</span>
+            <span class="letter">L</span>
+            <span class="letter">S</span>
+            <span class="letter">E</span>
+            <span class="letter">Y</span>
+            <span class="letter">E</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <header>
+            <div class="logo">BULLS<span>EYE</span></div>
+            <div class="subtitle">AI Bovine Detection & BreedTrace-XAI Interpretability Architecture</div>
+        </header>
+
+        <div class="content-wrapper">
+            <div id="video-container">
+                <video id="video" autoplay muted playsinline style="display: none;"></video>
+                <img id="resultImage" style="display: none;">
+                <div id="videoStatus">NO VIDEO FEED</div>
+                <div id="dropOverlay">DROP IMAGE TO SCAN</div>
+            </div>
+
+            <div class="controls-data-wrapper">
+                <div class="control-panel">
+                    <h2 class="panel-title">SYSTEM CONTROLS</h2>
+
+                    <!-- Mode Toggle -->
+                    <div class="mode-selector">
+                        <button class="mode-btn active" id="btnModeSnapshot" onclick="setMode('snapshot')">📸 SNAPSHOT</button>
+                        <button class="mode-btn" id="btnModeContinuous" onclick="setMode('continuous')">⚡ STREAM</button>
+                    </div>
+
+                    <div class="controls">
+                        <!-- Shutter button for Snapshot Mode -->
+                        <button class="btn btn-shutter" id="btnShutter" onclick="captureSnapshot()">
+                            <span>CAPTURE & ANALYZE</span>
+                            <span class="kbd-badge">SPACE</span>
+                        </button>
+
+                        <button class="btn" id="btnResumeFeed" onclick="resumeLiveFeed()" style="display: none;">
+                            <span>RESUME LIVE CAM</span>
+                        </button>
+
+                        <button class="btn" id="btnCamToggle" onclick="toggleWebcam()">
+                            <span id="camBtnText">ACTIVATE CAM</span>
+                        </button>
+
+                        <button class="btn btn-upload" onclick="document.getElementById('fileInput').click()">
+                            <span>UPLOAD PHOTO</span>
+                        </button>
+                        <input type="file" id="fileInput" accept="image/*" style="display: none;" onchange="handleFileUpload(event)">
+
+                        <button class="btn" onclick="loadModel()">
+                            <span>RELOAD MODELS</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="status-panel">
+                    <h2 class="panel-title">LIVE STATUS</h2>
+                    <div id="status">Models Ready. Click Activate Cam or Upload Photo.</div>
+                    <div id="counter-container" style="margin-top: 10px;">Cows Detected: 0</div>
+                </div>
+
+                <div class="results-panel" id="resultsContainer" style="display: none;">
+                    <h2 class="panel-title">TARGET ANALYSIS</h2>
+                    <table class="results-table" id="resultsTable">
+                        <thead>
+                            <tr><th>TARGET ID</th><th>BREED</th><th>CONFIDENCE</th></tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Acquisition Archive -->
+        <div class="gallery-section">
+            <div class="section-header">
+                <h2 class="section-title">ACQUISITION ARCHIVE</h2>
+                <div class="archive-counter" id="archiveCountBadge">0 Targets Archived (Click any to Revisit & Explain)</div>
+            </div>
+            <div class="gallery" id="gallery"></div>
+        </div>
+    </div>
+
+    <!-- Archive Dossier & XAI Modal -->
+    <div class="modal-backdrop" id="archiveModal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <span class="modal-title">DOSSIER // ARCHIVE INSPECTION</span>
+                    <span class="modal-target-badge" id="modalTopBreed">Breed</span>
+                    <span style="font-size:0.85em;color:var(--text-secondary);" id="modalTimestamp">--:--:--</span>
+                </div>
+                <button class="modal-close-btn" onclick="closeModal()">✕</button>
+            </div>
+
+            <div class="modal-body">
+                <!-- Left: Visual XAI Studio -->
+                <div class="xai-studio">
+                    <div class="image-viewer-box">
+                        <img id="modalImageView" src="" alt="Target Analysis">
+                        <div class="img-view-toggle">
+                            <button class="view-btn active" id="btnViewScan" onclick="toggleModalView('scan')">Scan</button>
+                            <button class="view-btn" id="btnViewXai" onclick="toggleModalView('xai')">Evidence Map</button>
+                        </div>
+                    </div>
+
+                    <div class="xai-controls">
+                        <div class="xai-label">Select Interpretability Engine</div>
+                        <div class="xai-method-group">
+                            <button class="xai-method-btn flagship active" id="btnMethodBreedtrace" onclick="selectXaiMethod('breedtrace')">
+                                <span class="icon">🧬</span>
+                                <span>BreedTrace</span>
+                            </button>
+                            <button class="xai-method-btn" id="btnMethodGradcam" onclick="selectXaiMethod('gradcam')">
+                                <span class="icon">🌈</span>
+                                <span>Grad-CAM</span>
+                            </button>
+                            <button class="xai-method-btn" id="btnMethodLime" onclick="selectXaiMethod('lime')">
+                                <span class="icon">🔬</span>
+                                <span>LIME</span>
+                            </button>
+                            <button class="xai-method-btn" id="btnMethodShap" onclick="selectXaiMethod('shap')">
+                                <span class="icon">⚡</span>
+                                <span>SHAP</span>
+                            </button>
+                        </div>
+
+                        <!-- Contrastive Breed Pair Selectors -->
+                        <div id="contrastiveSelectorBlock">
+                            <div class="xai-label" style="margin-top:2px;">Contrastive Breed Comparison (Target vs. Competitor)</div>
+                            <div class="contrast-selector-grid">
+                                <select class="breed-target-select" id="xaiBreedSelect" onchange="onBreedTargetChanged()"></select>
+                                <span class="contrast-vs-badge">VS</span>
+                                <select class="breed-target-select" id="xaiCompSelect" onchange="onBreedTargetChanged()"></select>
+                            </div>
+                        </div>
+
+                        <button class="btn-run-xai" id="btnExecuteXai" onclick="generateXaiExplanation()">
+                            <span>⚡ GENERATE BREEDTRACE EVIDENCE</span>
+                        </button>
+
+                        <!-- Anatomical Evidence Breakdown -->
+                        <div class="anatomical-evidence-card" id="anatomicalCard" style="display:none;">
+                            <div class="evidence-card-title">
+                                <span>ANATOMICAL MARGIN EVIDENCE A<sub>p</sub><sup>(c,d)</sup></span>
+                                <span id="evidenceMarginBadge" style="font-size:0.85em;color:#fff;">Margin: +0.00</span>
+                            </div>
+                            <div id="anatomicalRowsContainer"></div>
+                        </div>
+
+                        <!-- Reliability Scorecard -->
+                        <div class="reliability-scorecard" id="reliabilityScorecard" style="display:none;">
+                            <div class="reliability-header">
+                                <span style="font-weight:700;color:#fff;">RELIABILITY & FAITHFULNESS</span>
+                                <span id="reliabilityBadge" class="badge-verified">VERIFIED</span>
+                            </div>
+                            <div id="reliabilityMsg" style="color:#cbd5e1;line-height:1.4;">--</div>
+                            <div style="display:flex;justify-content:space-between;color:var(--text-muted);font-size:0.85em;margin-top:4px;">
+                                <span id="relMetricFaithfulness">Monotonic Deletion: --%</span>
+                                <span id="relMetricLeakage">Background Leakage: --%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: All 41 Prediction Values -->
+                <div class="predictions-container">
+                    <div class="pred-header">
+                        <div class="panel-title" style="margin-bottom:0;">ALL 41 PREDICTION VALUES</div>
+                    </div>
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="search-input" id="predSearchInput" placeholder="Filter 41 breeds (e.g. Gir, Jersey, Sahiwal)..." oninput="filterPredictions()">
+                    </div>
+                    <div class="pred-list" id="predListContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Splash Screen
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                document.body.classList.add('loaded');
+            }, 1000);
+        });
+
+        const socket = io();
+        let videoStream = null;
+        let isStreaming = false;
+        let activeMode = 'snapshot';
+        let isProcessing = false;
+        let streamTimer = null;
+
+        // Archive Storage
+        const acquisitionArchive = [];
+        let currentModalArchiveItem = null;
+        let currentXaiMethod = 'breedtrace';
+        let currentModalView = 'scan';
+
+        // 41 Breed Classes
+        const ALL_BREEDS = [
+            'Alambadi', 'Amritmahal', 'Ayrshire', 'Banni', 'Bargur', 'Bhadawari',
+            'Brown_Swiss', 'Dangi', 'Deoni', 'Gir', 'Guernsey', 'Hallikar',
+            'Hariana', 'Holstein_Friesian', 'Jaffrabadi', 'Jersey', 'Kangayam',
+            'Kankrej', 'Kasargod', 'Kenkatha', 'Kherigarh', 'Khillari',
+            'Krishna_Valley', 'Malnad_gidda', 'Mehsana', 'Murrah', 'Nagori',
+            'Nagpuri', 'Nili_Ravi', 'Nimari', 'Ongole', 'Pulikulam', 'Rathi',
+            'Red_Dane', 'Red_Sindhi', 'Sahiwal', 'Surti', 'Tharparkar', 'Toda',
+            'Umblachery', 'Vechur'
+        ];
+
+        // Populate modal select dropdowns
+        const xaiSelect = document.getElementById('xaiBreedSelect');
+        const xaiCompSelect = document.getElementById('xaiCompSelect');
+        ALL_BREEDS.forEach((breed, idx) => {
+            const opt1 = document.createElement('option');
+            opt1.value = idx;
+            opt1.textContent = `${idx + 1}. ${breed}`;
+            xaiSelect.appendChild(opt1);
+
+            const opt2 = document.createElement('option');
+            opt2.value = idx;
+            opt2.textContent = `${idx + 1}. ${breed}`;
+            xaiCompSelect.appendChild(opt2);
+        });
+
+        socket.on('connect', () => {
+            console.log('Connected to server');
+        });
+
+        function setMode(mode) {
+            activeMode = mode;
+            document.getElementById('btnModeSnapshot').classList.toggle('active', mode === 'snapshot');
+            document.getElementById('btnModeContinuous').classList.toggle('active', mode === 'continuous');
+
+            if (mode === 'snapshot') {
+                if (streamTimer) clearTimeout(streamTimer);
+                document.getElementById('btnShutter').style.display = 'flex';
+                document.getElementById('status').textContent = 'Snapshot Mode: Frame target & press Capture (or Space).';
+                document.getElementById('status').style.color = 'var(--accent-color)';
+                resumeLiveFeed();
+            } else {
+                document.getElementById('btnShutter').style.display = 'none';
+                document.getElementById('status').textContent = 'Continuous Mode: Auto-analyzing stream with flow control.';
+                document.getElementById('status').style.color = 'var(--accent-color)';
+                if (isStreaming) {
+                    scheduleNextContinuousFrame(100);
+                }
+            }
+        }
+
+        function toggleWebcam() {
+            if (isStreaming) {
+                stopWebcam();
+            } else {
+                startWebcam();
+            }
+        }
+
+        async function startWebcam() {
+            try {
+                videoStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: 'environment', width: 800, height: 600 } 
+                });
+                const video = document.getElementById('video');
+                video.srcObject = videoStream;
+                video.style.display = 'block';
+                document.getElementById('videoStatus').style.display = 'none';
+                document.getElementById('resultImage').style.display = 'none';
+                
+                isStreaming = true;
+                document.getElementById('camBtnText').textContent = 'TERMINATE CAM';
+                document.getElementById('status').textContent = activeMode === 'snapshot' 
+                    ? 'Cam active. Press Capture (or Space) to snap.'
+                    : 'Cam active. Running continuous auto-detection.';
+                document.getElementById('status').style.color = 'var(--accent-color)';
+
+                if (activeMode === 'continuous') {
+                    scheduleNextContinuousFrame(500);
+                }
+            } catch (error) {
+                document.getElementById('status').textContent = 'Error accessing webcam: ' + error.message;
+                document.getElementById('status').style.color = '#ff4d4d';
+            }
+        }
+
+        function stopWebcam() {
+            if (streamTimer) clearTimeout(streamTimer);
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            document.getElementById('video').style.display = 'none';
+            document.getElementById('videoStatus').style.display = 'flex';
+            document.getElementById('videoStatus').textContent = 'NO VIDEO FEED';
+            isStreaming = false;
+            document.getElementById('camBtnText').textContent = 'ACTIVATE CAM';
+            document.getElementById('status').textContent = 'Webcam terminated.';
+            document.getElementById('status').style.color = 'var(--text-secondary)';
+        }
+
+        function resumeLiveFeed() {
+            if (isStreaming) {
+                const video = document.getElementById('video');
+                video.style.display = 'block';
+                video.play().catch(() => {});
+                document.getElementById('resultImage').style.display = 'none';
+                document.getElementById('btnResumeFeed').style.display = 'none';
+                document.getElementById('status').textContent = 'Live camera preview active.';
+                document.getElementById('status').style.color = 'var(--accent-color)';
+            }
+        }
+
+        function captureSnapshot() {
+            if (!isStreaming) {
+                document.getElementById('status').textContent = 'Activate camera or upload photo first!';
+                document.getElementById('status').style.color = '#ff90b3';
+                return;
+            }
+
+            const video = document.getElementById('video');
+            video.style.display = 'block';
+            video.play().catch(() => {});
+            document.getElementById('resultImage').style.display = 'none';
+            document.getElementById('btnResumeFeed').style.display = 'none';
+
+            isProcessing = true;
+            const timerGuard = setTimeout(() => { isProcessing = false; }, 8000);
+
+            document.getElementById('status').textContent = '⚡ Running YOLOv8 detection & Breed Classifier...';
+            document.getElementById('status').style.color = 'var(--accent-color)';
+
+            setTimeout(() => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = video.videoWidth || 800;
+                    canvas.height = video.videoHeight || 600;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                    const imageData = canvas.toDataURL('image/jpeg', 0.85);
+                    socket.emit('video_frame', { image: imageData, is_snapshot: true });
+                } catch (err) {
+                    isProcessing = false;
+                    clearTimeout(timerGuard);
+                    document.getElementById('status').textContent = 'Frame capture error: ' + err.message;
+                    document.getElementById('status').style.color = '#ff4d4d';
+                }
+            }, 60);
+        }
+
+        function scheduleNextContinuousFrame(delay = 800) {
+            if (streamTimer) clearTimeout(streamTimer);
+            if (!isStreaming || activeMode !== 'continuous') return;
+
+            streamTimer = setTimeout(() => {
+                if (!isStreaming || activeMode !== 'continuous' || isProcessing) return;
+
+                const video = document.getElementById('video');
+                if (!video || video.videoWidth === 0) {
+                    scheduleNextContinuousFrame(500);
+                    return;
+                }
+
+                isProcessing = true;
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+
+                const imageData = canvas.toDataURL('image/jpeg', 0.7);
+                socket.emit('video_frame', { image: imageData, is_snapshot: false });
+            }, delay);
+        }
+
+        socket.on('detection_result', function(data) {
+            isProcessing = false;
+
+            if (data.status === 'success') {
+                const img = document.getElementById('resultImage');
+                img.src = data.image;
+                img.style.display = 'block';
+
+                if (data.is_snapshot) {
+                    document.getElementById('video').style.display = 'none';
+                    document.getElementById('btnResumeFeed').style.display = 'flex';
+                }
+
+                displayResults(data.results);
+
+                if (data.results.length > 0) {
+                    archiveDetection(data.results, data.image);
+                    const topResult = data.results[0];
+                    document.getElementById('status').textContent = `Target Acquired: ${topResult.breed} (${(topResult.breed_conf * 100).toFixed(1)}%)`;
+                    document.getElementById('status').style.color = '#34d399';
+                } else {
+                    document.getElementById('status').textContent = 'Scan Complete: No cow detected in frame.';
+                    document.getElementById('status').style.color = 'var(--text-secondary)';
+                }
+
+                if (activeMode === 'continuous' && isStreaming) {
+                    scheduleNextContinuousFrame(700);
+                }
+            } else {
+                document.getElementById('status').textContent = 'ERROR: ' + data.message;
+                document.getElementById('status').style.color = '#ff4d4d';
+
+                if (activeMode === 'continuous' && isStreaming) {
+                    scheduleNextContinuousFrame(1500);
+                }
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && activeMode === 'snapshot' && isStreaming) {
+                e.preventDefault();
+                captureSnapshot();
+            }
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            processImageFile(file);
+            event.target.value = '';
+        }
+
+        function processImageFile(file) {
+            isProcessing = true;
+            document.getElementById('status').textContent = `Analyzing ${file.name}...`;
+            document.getElementById('status').style.color = 'var(--accent-color)';
+
+            const formData = new FormData();
+            formData.append('image', file);
+
+            fetch('/detect_image', {
+                method: 'POST',
+                body: formData
+            })
+            .then(res => res.json())
+            .then(data => {
+                isProcessing = false;
+                if (data.status === 'success') {
+                    const img = document.getElementById('resultImage');
+                    img.src = data.image;
+                    img.style.display = 'block';
+                    document.getElementById('video').style.display = 'none';
+                    document.getElementById('videoStatus').style.display = 'none';
+                    document.getElementById('btnResumeFeed').style.display = isStreaming ? 'flex' : 'none';
+
+                    displayResults(data.results);
+
+                    if (data.results.length > 0) {
+                        archiveDetection(data.results, data.image);
+                        const topResult = data.results[0];
+                        document.getElementById('status').textContent = `Identified: ${topResult.breed} (${(topResult.breed_conf * 100).toFixed(1)}%)`;
+                        document.getElementById('status').style.color = '#34d399';
+                    } else {
+                        document.getElementById('status').textContent = 'Scan Complete: No cows detected in uploaded image.';
+                        document.getElementById('status').style.color = 'var(--text-secondary)';
+                    }
+                } else {
+                    document.getElementById('status').textContent = 'Error: ' + data.message;
+                    document.getElementById('status').style.color = '#ff4d4d';
+                }
+            })
+            .catch(err => {
+                isProcessing = false;
+                document.getElementById('status').textContent = 'Upload failed: ' + err.message;
+                document.getElementById('status').style.color = '#ff4d4d';
+            });
+        }
+
+        const dropZone = document.getElementById('video-container');
+        const dropOverlay = document.getElementById('dropOverlay');
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropOverlay.style.display = 'flex';
+        });
+        dropZone.addEventListener('dragleave', () => {
+            dropOverlay.style.display = 'none';
+        });
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropOverlay.style.display = 'none';
+            if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                processImageFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        function displayResults(results) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const resultsBody = document.getElementById('resultsBody');
+            
+            if (results.length === 0) {
+                resultsContainer.style.display = 'none';
+                document.getElementById('counter-container').textContent = 'Cows Detected: 0';
+                return;
+            }
+            
+            resultsContainer.style.display = 'block';
+            resultsBody.innerHTML = '';
+            
+            results.forEach((result, index) => {
+                const row = resultsBody.insertRow();
+                row.insertCell(0).textContent = `TARGET 0${index + 1}`;
+                
+                let candidatesHtml = '';
+                if (result.top_candidates && result.top_candidates.length > 1) {
+                    const runnerUps = result.top_candidates.slice(1, 4).map(c => 
+                        `<span style="color:var(--text-secondary);font-size:0.85em">${c.breed} (${(c.confidence*100).toFixed(0)}%)</span>`
+                    ).join(', ');
+                    candidatesHtml = `<div style="font-size:0.8em;color:#8da2b5;margin-top:3px">Top alternatives: ${runnerUps}</div>`;
+                }
+
+                row.insertCell(1).innerHTML = `<strong style="color:#fff;font-size:1.05em">${result.breed}</strong>${candidatesHtml}`;
+                row.insertCell(2).innerHTML = `<span style="color:var(--accent-color);font-weight:700">${(result.breed_conf * 100).toFixed(1)}%</span>`;
+            });
+            
+            document.getElementById('counter-container').textContent = `Cows Detected: ${results.length}`;
+        }
+
+        // =========================================================================
+        // Archive Management & Dossier Inspection Modal
+        // =========================================================================
+
+        function archiveDetection(results, annotatedImage) {
+            if (results.length === 0) return;
+            const res = results[0];
+
+            const archiveItem = {
+                id: 'arc_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                timestamp: new Date().toLocaleTimeString(),
+                annotatedImage: annotatedImage,
+                cropImage: res.crop_image || annotatedImage,
+                breed: res.breed,
+                breedConf: res.breed_conf,
+                breedIdx: res.breed_idx !== undefined ? res.breed_idx : 0,
+                allPredictions: res.all_predictions || res.top_candidates || [],
+                xaiCache: {}
+            };
+
+            acquisitionArchive.unshift(archiveItem);
+            renderArchiveGallery();
+        }
+
+        function renderArchiveGallery() {
+            const gallery = document.getElementById('gallery');
+            gallery.innerHTML = '';
+            document.getElementById('archiveCountBadge').textContent = `${acquisitionArchive.length} Target${acquisitionArchive.length === 1 ? '' : 's'} Archived (Click any to Revisit & Explain)`;
+
+            acquisitionArchive.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'gallery-item';
+                card.onclick = () => openArchiveModal(item.id);
+
+                card.innerHTML = `
+                    <img src="${item.cropImage || item.annotatedImage}" alt="${item.breed}">
+                    <div class="card-body">
+                        <div class="card-breed">
+                            <span>${item.breed}</span>
+                            <span class="card-conf">${(item.breedConf * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="card-meta">
+                            <span>${item.timestamp}</span>
+                            <span class="badge-xai">🧬 BREEDTRACE</span>
+                        </div>
+                    </div>
+                `;
+                gallery.appendChild(card);
+            });
+        }
+
+        function openArchiveModal(archiveId) {
+            const item = acquisitionArchive.find(a => a.id === archiveId);
+            if (!item) return;
+            currentModalArchiveItem = item;
+
+            document.getElementById('modalTopBreed').textContent = `${item.breed} (${(item.breedConf * 100).toFixed(1)}%)`;
+            document.getElementById('modalTimestamp').textContent = item.timestamp;
+
+            // Default image view
+            currentModalView = 'scan';
+            document.getElementById('modalImageView').src = item.cropImage || item.annotatedImage;
+            document.getElementById('btnViewScan').classList.add('active');
+            document.getElementById('btnViewXai').classList.remove('active');
+
+            // Set target breed
+            document.getElementById('xaiBreedSelect').value = item.breedIdx;
+
+            // Set competitor breed to runner-up
+            let runnerUpIdx = 0;
+            if (item.allPredictions && item.allPredictions.length > 1) {
+                runnerUpIdx = item.allPredictions[1].index;
+            } else {
+                runnerUpIdx = (item.breedIdx + 1) % ALL_BREEDS.length;
+            }
+            document.getElementById('xaiCompSelect').value = runnerUpIdx;
+
+            // Default method
+            selectXaiMethod('breedtrace');
+
+            // Populate all 41 predictions
+            renderPredictionList(item.allPredictions);
+
+            // Open modal
+            document.getElementById('archiveModal').classList.add('active');
+
+            // Automatically generate BreedTrace evidence on opening
+            generateXaiExplanation();
+        }
+
+        function closeModal() {
+            document.getElementById('archiveModal').classList.remove('active');
+        }
+
+        function toggleModalView(view) {
+            if (!currentModalArchiveItem) return;
+            currentModalView = view;
+            document.getElementById('btnViewScan').classList.toggle('active', view === 'scan');
+            document.getElementById('btnViewXai').classList.toggle('active', view === 'xai');
+
+            const cacheKey = `${currentXaiMethod}_${document.getElementById('xaiBreedSelect').value}_${document.getElementById('xaiCompSelect').value}`;
+            const cachedXai = currentModalArchiveItem.xaiCache[cacheKey];
+
+            if (view === 'xai') {
+                if (cachedXai) {
+                    document.getElementById('modalImageView').src = cachedXai.explanation_image;
+                } else {
+                    generateXaiExplanation();
+                }
+            } else {
+                document.getElementById('modalImageView').src = currentModalArchiveItem.cropImage || currentModalArchiveItem.annotatedImage;
+            }
+        }
+
+        function selectXaiMethod(method) {
+            currentXaiMethod = method;
+            document.getElementById('btnMethodBreedtrace').classList.toggle('active', method === 'breedtrace');
+            document.getElementById('btnMethodGradcam').classList.toggle('active', method === 'gradcam');
+            document.getElementById('btnMethodLime').classList.toggle('active', method === 'lime');
+            document.getElementById('btnMethodShap').classList.toggle('active', method === 'shap');
+
+            // Show/hide competitor selector
+            document.getElementById('contrastiveSelectorBlock').style.display = (method === 'breedtrace') ? 'block' : 'none';
+
+            // Check cache
+            if (currentModalArchiveItem) {
+                const targetIdx = document.getElementById('xaiBreedSelect').value;
+                const compIdx = document.getElementById('xaiCompSelect').value;
+                const cacheKey = `${method}_${targetIdx}_${compIdx}`;
+                if (currentModalArchiveItem.xaiCache[cacheKey]) {
+                    displayXaiResult(currentModalArchiveItem.xaiCache[cacheKey]);
+                } else if (currentModalView === 'xai') {
+                    generateXaiExplanation();
+                }
+            }
+        }
+
+        function onBreedTargetChanged() {
+            if (currentModalArchiveItem && currentModalView === 'xai') {
+                generateXaiExplanation();
+            }
+        }
+
+        function generateXaiExplanation() {
+            if (!currentModalArchiveItem) return;
+
+            const btn = document.getElementById('btnExecuteXai');
+            const targetIdx = parseInt(document.getElementById('xaiBreedSelect').value, 10);
+            const compIdx = parseInt(document.getElementById('xaiCompSelect').value, 10);
+            const cacheKey = `${currentXaiMethod}_${targetIdx}_${compIdx}`;
+
+            if (currentModalArchiveItem.xaiCache[cacheKey]) {
+                displayXaiResult(currentModalArchiveItem.xaiCache[cacheKey]);
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = `<span>⏳ Verifying ${currentXaiMethod.toUpperCase()} Evidence...</span>`;
+
+            fetch('/explain_xai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image: currentModalArchiveItem.cropImage || currentModalArchiveItem.annotatedImage,
+                    method: currentXaiMethod,
+                    class_idx: targetIdx,
+                    comp_idx: compIdx
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerHTML = `<span>⚡ GENERATE BREEDTRACE EVIDENCE</span>`;
+
+                if (data.status === 'success') {
+                    currentModalArchiveItem.xaiCache[cacheKey] = data;
+                    displayXaiResult(data);
+                } else {
+                    alert('XAI Error: ' + data.message);
+                }
+            })
+            .catch(err => {
+                btn.disabled = false;
+                btn.innerHTML = `<span>⚡ GENERATE BREEDTRACE EVIDENCE</span>`;
+                alert('XAI Request failed: ' + err.message);
+            });
+        }
+
+        function displayXaiResult(data) {
+            document.getElementById('modalImageView').src = data.explanation_image;
+            document.getElementById('btnViewScan').classList.remove('active');
+            document.getElementById('btnViewXai').classList.add('active');
+            currentModalView = 'xai';
+
+            const anatomicalCard = document.getElementById('anatomicalCard');
+            const reliabilityCard = document.getElementById('reliabilityScorecard');
+
+            if (data.method === 'breedtrace') {
+                anatomicalCard.style.display = 'flex';
+                reliabilityCard.style.display = 'flex';
+
+                document.getElementById('evidenceMarginBadge').textContent = `Logit Margin: ${data.baseline_margin > 0 ? '+' : ''}${data.baseline_margin}`;
+
+                // Populate anatomical rows
+                const rowsContainer = document.getElementById('anatomicalRowsContainer');
+                rowsContainer.innerHTML = '';
+
+                data.anatomical_attributions.forEach(part => {
+                    if (part.id === 'background_context') return;
+
+                    const row = document.createElement('div');
+                    row.className = 'evidence-row';
+
+                    const isSupport = part.effect === 'supports_target';
+                    const tagClass = isSupport ? 'tag-supports' : (part.effect === 'favors_competitor' ? 'tag-favors-comp' : 'tag-neutral');
+                    const tagText = isSupport ? `Supports ${data.target_breed}` : (part.effect === 'favors_competitor' ? `Favors ${data.competing_breed}` : 'Neutral');
+                    const fillClass = isSupport ? 'fill-supports' : 'fill-comp';
+                    const sign = part.margin_change > 0 ? '+' : '';
+
+                    row.innerHTML = `
+                        <div class="evidence-header">
+                            <span class="evidence-name">
+                                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:rgb(${part.color.join(',')})"></span>
+                                ${part.name}
+                            </span>
+                            <div>
+                                <span style="font-family:var(--font-secondary);font-weight:700;margin-right:6px;color:${isSupport ? '#34d399' : '#f87171'}">A<sub>p</sub>: ${sign}${part.margin_change}</span>
+                                <span class="evidence-tag ${tagClass}">${tagText}</span>
+                            </div>
+                        </div>
+                        <div class="evidence-bar-bg">
+                            <div class="evidence-bar-fill ${fillClass}" style="width: ${Math.min(100, Math.max(8, part.contribution_pct))}%"></div>
+                        </div>
+                        <div style="font-size:0.75em;color:var(--text-muted);margin-top:2px;">${part.description}</div>
+                    `;
+                    rowsContainer.appendChild(row);
+                });
+
+                // Reliability Scorecard
+                const rel = data.reliability;
+                const badge = document.getElementById('reliabilityBadge');
+                if (rel.flag === 'CONFIRMED_ANATOMICAL') {
+                    badge.className = 'badge-verified';
+                    badge.textContent = 'VERIFIED';
+                } else {
+                    badge.className = 'badge-shortcut';
+                    badge.textContent = rel.flag;
+                }
+
+                document.getElementById('reliabilityMsg').textContent = rel.message;
+                document.getElementById('relMetricFaithfulness').textContent = `Monotonic Deletion: ${rel.faithfulness_score}%`;
+                document.getElementById('relMetricLeakage').textContent = `Background Leakage: ${rel.background_leakage_pct}% (${rel.background_leakage_pct < 15 ? 'PASS' : 'WARNING'})`;
+            } else {
+                // Non-breedtrace baselines (LIME, SHAP, Grad-CAM)
+                anatomicalCard.style.display = 'none';
+                reliabilityCard.style.display = 'flex';
+                document.getElementById('reliabilityBadge').className = 'badge-verified';
+                document.getElementById('reliabilityBadge').textContent = 'BASELINE';
+                document.getElementById('reliabilityMsg').textContent = data.summary || `${data.method.toUpperCase()} heatmap attribution overlay generated.`;
+                document.getElementById('relMetricFaithfulness').textContent = `Method: ${data.method.toUpperCase()}`;
+                document.getElementById('relMetricLeakage').textContent = `Runtime: ${data.elapsed_sec}s`;
+            }
+        }
+
+        // =========================================================================
+        // Render All 41 Prediction Values
+        // =========================================================================
+
+        function renderPredictionList(predictions) {
+            const container = document.getElementById('predListContainer');
+            container.innerHTML = '';
+            document.getElementById('predSearchInput').value = '';
+
+            predictions.forEach((item, rank) => {
+                const row = document.createElement('div');
+                row.className = `pred-row ${rank === 0 ? 'top-rank' : ''}`;
+                row.dataset.breed = item.breed.toLowerCase();
+                row.onclick = () => {
+                    document.getElementById('xaiBreedSelect').value = item.index;
+                    generateXaiExplanation();
+                };
+
+                const percentage = (item.confidence * 100).toFixed(2);
+                row.innerHTML = `
+                    <div class="pred-row-top">
+                        <div class="pred-rank-name">
+                            <span class="pred-rank">#${rank + 1}</span>
+                            <span class="pred-name">${item.breed}</span>
+                        </div>
+                        <span class="pred-conf-val">${percentage}%</span>
+                    </div>
+                    <div class="pred-bar-bg">
+                        <div class="pred-bar-fill" style="width: ${Math.max(percentage, 1)}%"></div>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        }
+
+        function filterPredictions() {
+            const query = document.getElementById('predSearchInput').value.toLowerCase().trim();
+            const rows = document.querySelectorAll('#predListContainer .pred-row');
+            rows.forEach(row => {
+                const breed = row.dataset.breed;
+                row.style.display = breed.includes(query) ? 'flex' : 'none';
+            });
+        }
+
+        function loadModel() {
+            document.getElementById('status').textContent = 'Loading models...';
+            document.getElementById('status').style.color = 'var(--accent-color)';
+            fetch('/load_model', { method: 'POST' })
+                .then(r => r.json())
+                .then(d => {
+                    document.getElementById('status').textContent = d.message;
+                    document.getElementById('status').style.color = d.status === 'success' ? '#34d399' : '#ff4d4d';
+                })
+                .catch(err => {
+                    document.getElementById('status').textContent = 'Model load failed: ' + err.message;
+                    document.getElementById('status').style.color = '#ff4d4d';
+                });
+        }
+    </script>
+</body>
+</html>
